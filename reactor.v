@@ -1,88 +1,90 @@
 Require Import Reals.
+Require Import Coquelicot.Coquelicot.
 
 Local Open Scope R_scope.
 
 Record ReactorState := {
-  keff : R;
-  T_core : R;
-  T_coolant : R;
-  pressure : R;
-  rods_position : nat;
-  poison_concentration : R;
-  comb_consumption : R;
-  cooling_efficiency : R;
+  keff : R -> R;
+  T_core : R -> R;
+  T_coolant : R -> R;
+  rods_pos : R -> nat;
+  poison_c : R -> R;
+  P_core : R -> R;
+  P_out : R -> R;
+  P_out_target : R -> R;
   time : R
 }.
 
-Definition keff_nominal := 2.
-Definition T_ref := 300. (* °C *)
-Definition alpha := 14.
+(* physical constants *)
+
+Definition keff_0 := 1.2. (* TODO *)
+Definition alpha := 1. (* TODO *) (* reactivity gain / K around the reference state *)
+Definition beta := 1. (* TODO *) (* reactivity gain / poison ppm around the reference state *)
+Definition gamma := 1. (* TODO *) (* reactivity gain per cm of rod insertion *)
+Definition epsilon := 1. (* TODO *) (* heat transfered from core to coolant in W / K *)
+Definition zeta := 1. (* TODO *) (* heat transfered from coolant to secondary circuit in W / K  *)
+Definition T_c0 := 300. (* TODO *) (* reference core temperature in °C  *)
+Definition P_c0 := 1. (* TODO *) (* reference core power in W  *)
+Definition poison_c0 := 300. (* TODO *) (* reference poison concentration in ppm *)
+Definition C_core := 1. (* TODO *) (* core thermal capacity in J / K *)
+Definition C_coolant := 1. (* TODO *) (* coolant thermal capacity in J / K *)
+Definition T_ext := 1. (* TODO *) (* secondary circuit temperature in °C *)
+Definition lambda := 1. (* TODO *) (* poison generation via fission in ppm / W *)
+Definition mu := 1. (* TODO *) (* poison decay in ppm / s *)
+Definition eta := 1. (* TODO *) (* rod insertion coefficient in cm / W *)
+
+(* safety constants *) 
+
 Definition core_overheating_threshold := 600. (* °C *)
 Definition coolant_overheating_threshold := 100. (* °C *)
 
-Inductive step_keff : ReactorState -> R -> Prop :=
-  | step_keff_C1 : forall s,
-    step_keff s (keff_nominal - alpha * ((T_core s) - T_ref)).
+(* physical values evolution *)
 
-Inductive step_T_core : ReactorState -> R -> Prop :=
-  | step_T_core_C1 : forall s r,
-    step_T_core s r. (* TODO *)
+Theorem T_core_derivable (s : ReactorState) : forall t, derivable_pt (T_core s) t.
+Proof. Admitted.
 
-Inductive step_T_coolant : ReactorState -> R -> Prop :=
-  | step_T_coolant_C1 : forall s r,
-    step_T_coolant s r. (* TODO *)
+Definition dT_core_dt (s : ReactorState) (t : R) : R :=
+  derive_pt (T_core s) t (T_core_derivable s t).
 
-Inductive step_pressure : ReactorState -> R -> Prop :=
-  | step_pressure_C1 : forall s r,
-    step_pressure s r. (* TODO *)
+Definition core_heat_balance_equation (s : ReactorState) (t : R) : Prop :=
+  C_core * dT_core_dt s t = (P_core s t) - epsilon * ((T_core s t) - (T_coolant s t)).
 
-Inductive step_rods_position : ReactorState -> nat -> Prop :=
-  | step_rods_position_C1 : forall s n,
-    step_rods_position s n. (* TODO *)
+Theorem T_coolant_derivable (s : ReactorState) : forall t, derivable_pt (T_coolant s) t.
+Proof. Admitted.
 
-Inductive step_poison_concentration : ReactorState -> R -> Prop :=
-  | step_poison_concentration_C1 : forall s r,
-    step_poison_concentration s r. (* TODO *)
+Definition dT_coolant_dt (s : ReactorState) (t : R) : R :=
+  derive_pt (T_coolant s) t (T_coolant_derivable s t).
 
-Inductive step_comb_consumption : ReactorState -> R -> Prop :=
-  | step_comb_consumption_C1 : forall s r,
-    step_comb_consumption s r. (* TODO *)
+Definition coolant_heat_balance_equation (s : ReactorState) (t : R) : Prop :=
+  C_coolant * dT_coolant_dt s t = epsilon * ((T_core s t) - (T_coolant s t)) 
+                                - zeta * ((T_coolant s t) - (T_ext)).
 
-Inductive step_cooling_efficiency : ReactorState -> R -> Prop :=
-  | step_cooling_efficiency_C1 : forall s r,
-    step_cooling_efficiency s r. (* TODO *)
+Definition keff_equation (s : ReactorState) (t : R) : Prop :=
+  (keff s t) = (keff_0
+              - alpha * ((T_core s t) - T_c0)
+              - beta * ((poison_c s t) - poison_c0)
+              - gamma * INR (rods_pos s t)).
 
-Inductive step : ReactorState -> ReactorState -> Prop :=
-  | step_C1 : forall (s s' : ReactorState),
-    step_keff s (keff s') ->
-    step_T_core s (T_core s') ->
-    step_T_coolant s (T_coolant s') ->
-    step_pressure s (pressure s') ->
-    step_rods_position s (rods_position s') ->
-    step_poison_concentration s (poison_concentration s') ->
-    step_comb_consumption s (comb_consumption s') ->
-    (time s) + 1 = (time s') -> 
-    step s s'.
+Theorem poison_c_derivable (s : ReactorState) : forall t, derivable_pt (poison_c s) t.
+Proof. Admitted.
 
-Inductive reachable_from : ReactorState -> ReactorState -> Prop :=
-  | Reach_self : forall s,
-    reachable_from s s
-  | Reachable_trans : forall s1 s2 s3,
-    reachable_from s1 s2 ->
-    step s2 s3 ->
-    reachable_from s1 s3.
+Definition dpoison_c_dt (s : ReactorState) (t : R) : R :=
+  derive_pt (poison_c s) t (poison_c_derivable s t).
 
-Inductive is_initial_state : ReactorState -> Prop :=
-  | is_initial_state_C1 : forall s, is_initial_state s. (* TODO *)
+Definition poison_balance_equation (s : ReactorState) (t : R) : Prop :=
+  dpoison_c_dt s t = lambda * (P_core s t) - mu * (poison_c s t).
 
-Inductive reachable : ReactorState -> Prop :=
-  | reachable_C1 : forall initial_state s,
-    is_initial_state initial_state ->
-    reachable_from initial_state s ->
-    reachable s.
+Definition P_core_expression (s : ReactorState) (t : R) : Prop :=
+  P_core s t = P_c0 * ((keff s t) - 1).
 
-Definition is_invariant (P : ReactorState -> Prop) : Prop :=
-  forall s, reachable s -> P s.
+Definition P_out_expression (s : ReactorState) (t : R) : Prop :=
+  P_out s t = zeta * ((T_coolant s t) - (T_ext)).
+
+(* rod control *)
+
+Definition rod_control_expression (s : ReactorState) (t : R) : Prop :=
+
+(* safety properties *)
 
 Definition not_core_overheating (s : ReactorState) : Prop :=
   T_core s <= core_overheating_threshold.
